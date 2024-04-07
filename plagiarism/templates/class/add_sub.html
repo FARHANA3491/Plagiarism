@@ -29,7 +29,15 @@
             </div>
             <p>Due Date: {{i.due_date}}</p>
         </div>
-        <p>Total grade: {{i.points}}</p>
+        <p>
+            {% if submissions.exists %}
+                {% if submissions.0.grade_granded %}
+                    Graded: {{ submissions.0.grade_granded }} / {{ i.points }}
+                {% else %}
+                Total grade: {{ i.points }}
+                {% endif %}
+            {% endif %}
+        </p>
             <hr style="background:#007bff;">
         <div>
         <p>{{i.instructions}}</p>
@@ -58,6 +66,7 @@
                         {% if submissions.exists %}
                         <i class="fas fa-file-upload"></i> <a href="{{ submissions.0.submitted_file.url }}">{{ submissions.0.submitted_file.name|cut:'submissions/' }}</a>
                         {% else %}
+                        <p id="pdf_name"></p>
                         <label for="pdf_upload" class="custom-file-upload">
                             <i class="fas fa-file-upload"></i> Upload from your device
                         </label>
@@ -92,5 +101,11 @@
 <div>
 
 {% endfor %}
+<script>
+    document.getElementById("pdf_upload").addEventListener("change", function(event) {
+        var filename = event.target.files[0].name;
+        document.getElementById("pdf_name").textContent = filename;
+    });
+</script>
 
 {% endblock %}

@@ -1,4 +1,3 @@
-from django.shortcuts import render
 from . models import *
 from django.shortcuts import redirect, render
 from django.contrib import messages
@@ -10,6 +9,17 @@ from django.contrib.auth.decorators import login_required
 from datetime import datetime
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
+import joblib
+from pprint import PrettyPrinter
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import string
+import fitz  # PyMuPDF
+import tempfile
+from ML_model.views import *
 # Create your views here.
 
 @login_required(login_url='login')
@@ -29,11 +39,19 @@ def create_class(request):
 
 @login_required(login_url='login')
 def teacher(request):
+    result,is_plagiarized=check(request)
     teacher = request.user.teachers
     workspaces = WorkSpace.objects.filter(teacher=teacher).order_by('-created_at')
+    if result is not None:
+        if is_plagiarized:
+            message = f"The document is plagiarized with {result:.2f}% plagiarism."
+        else:
+            message = "The document is not plagiarized."
+    else:
+        message = None
     if not workspaces:
         messages.success(request,'No workspce exists !!')
-    return render(request,'dashboard/teacher/teacher.html',{'workspace': workspaces}) 
+    return render(request,'dashboard/teacher/teacher.html',{'workspace': workspaces,'message': message}) 
 
 
 @login_required(login_url='login')   
@@ -49,11 +67,13 @@ def edit_workspace(request,workspace_id):
     else:
         return render(request, 'class/edit_class.html', {'workspace': workspace}) 
 
+@login_required(login_url='login')
 def delete_workspace(request, workspace_id):
+    print("Hello")
     try:
         workspace = WorkSpace.objects.get(id=workspace_id)
         workspace.delete()
-        messages.succes(request,'Workspace deleted Successfully')
+        messages.success(request,'Workspace deleted Successfully')
         return redirect('teacher')
     except WorkSpace.DoesNotExist:
         raise Http404("Workspace does not exist")
@@ -165,13 +185,23 @@ def update_sub(request,assignment_id):
     return render(request,'class/update_sub.html',{'assignment': assignment, 'submissions': submissions})
 
 
+
+        #messages.success("Plagiarism amount= ",plagiarism_amount)
+
 @login_required(login_url='login')   
 def student(request):
-    # Fetch the current logged-in student
+    result,is_plagiarized=check(request)
     student = request.user.students
     # Get the workspaces joined by the student
     joined_workspaces = WorkSpace.objects.filter(membership__student=student).order_by('-membership__joining_date')
-    return render(request, 'dashboard/student/student.html', {'joined_workspaces': joined_workspaces})  
+    if result is not None:
+        if is_plagiarized:
+            message = f"The document is plagiarized with {result:.2f}% plagiarism."
+        else:
+            message = "The document is not plagiarized."
+    else:
+        message = None
+    return render(request, 'dashboard/student/student.html', {'joined_workspaces': joined_workspaces,'message': message})  
 
 def people(request,workspace_id):
     workspace = WorkSpace.objects.get(id=workspace_id)
@@ -227,5 +257,74 @@ def recieve_mail(request):
     return render(request,'dashboard/student/email.html')
 
 
+def automatic_grading(request, submission_id):
+    submission = Submission.objects.get(id=submission_id)
+    student_document_path = submission.submitted_file.path
+    print(student_document_path)
+    assignments = submission.assignment
+   
+    
+    student_pdf_bytes = open(student_document_path, "rb").read()
 
-  
+    content_read = read_input(student_pdf_bytes)
+
+
+    # Preprocess the student document
+    preprocessed_student_text = preprocess_text(content_read)
+
+    # Detect plagiarism by passing the preprocessed text to detect_plagiarism function
+    plagiarism_amount = detect_plagiarism(preprocessed_student_text)
+
+    predicted_plagiarism = int(plagiarism_amount*100)
+    print("Predicted amount of plagiarism detected: {}%".format(predicted_plagiarism))
+    threshold=60
+    if predicted_plagiarism>threshold:
+        is_plagiarised = True
+        print("The document is plagiarised!")
+    else:
+        is_plagiarised = False
+        print("The document is not plagiarised")
+
+    grade=0
+    
+    if not is_plagiarised:
+      answer_key_path = assignments.pdf.path
+      answer_key_pdf_bytes = open(student_document_path, "rb").read()
+      answer_key = read_input(answer_key_pdf_bytes)
+
+      max_grade=assignments.points
+      print("Max grade",max_grade)
+
+      # Preprocess the answer key
+      preprocessed_answer_key_text = preprocess_text_grade(answer_key)
+
+      # Preprocess the student document
+      preprocessed_student_text_grade = preprocess_text_grade(content_read)
+
+      vectorizer = TfidfVectorizer()
+      tfidf_matrix = vectorizer.fit_transform([preprocessed_student_text_grade, preprocessed_answer_key_text])
+
+      similarity_score = cosine_similarity(tfidf_matrix)[0, 1]
+      print('similarity_score',similarity_score)
+      grade_percentage = similarity_score * 100  # Calculate the similarity score as a percentage
+      grade = (grade_percentage / 100) * max_grade
+      
+    print("Grade:",grade)
+    submission.grade_granded = grade
+    submission.save()
+
+    return redirect('view_sub', assignment_id=assignments.id)
+    #   return render(request, 'class/view_submissions.html')
+
+
+def edit_grade(request, submission_id):
+    if request.method == 'POST':
+        submission = Submission.objects.get(id=submission_id)
+        new_grade = request.POST.get('new_grade')  # Assuming you have a form input field named 'new_grade'
+        submission.grade_granded = new_grade
+        submission.save()
+        return redirect('view_sub', assignment_id=submission.assignment.id)
+    else:
+        submission = Submission.objects.get(id=submission_id)
+        points = submission.assignment.points  # Fetch points from assignment
+        return render(request, 'class/edit_grade.html', {'submission': submission, 'points': points})

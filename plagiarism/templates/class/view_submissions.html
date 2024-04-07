@@ -4,6 +4,7 @@
 {% endblock %}
 {% load tz %}
 {% block css %}
+
 .title{
     color:#007bff;
     margin-left:10px;
@@ -37,7 +38,7 @@
     <div class="col-11">
         <div class="assignment-header" style="display:flex;justify-content:space-between;">
             <div class="" style="display:flex;">
-                <i class="fas fa-file-alt fa-5x submission-icon"></i>&nbsp&nbsp
+                <i class="fas fa-file-alt fa-5x submission-icon"></i>&nbsp;&nbsp;
                 <h2 class="title">{{i.title}}</h2>
             </div>
             <p>Due Date: {{i.due_date}}</p>
@@ -62,7 +63,12 @@
                 <h3>{{submitted}}</h3>
                 <p>Submitted</p>
             </div>
+        </div>
     </div>
+    <div class="col-5"></div>
+    <div class="col-3">
+        <button style="text-align:center; padding :8px;border-radius: 5px;background:rgb(5, 130, 238);color:white; ">Automatic Grading</button>
+        <button style="text-align:center; padding :8px;border-radius: 5px;background:rgb(5, 130, 238);color:white; margin-top:20px;  ">Manual Grading</button>
     </div>
 </div>
 
@@ -93,7 +99,7 @@
                     <td style="color:green;">On time({{submission_time}})</td>
                     {% endif %}
                     {% endwith %}
-                    <td>_/{{i.points}}</td>
+                    <td><a href="{% url 'automatic_grading' j.id %}">10</a></td>
                 </tr>
                 {% endfor %}
         </table>

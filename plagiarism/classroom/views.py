@@ -226,4 +226,6 @@ def send_mail(request):
 def recieve_mail(request):
     return render(request,'dashboard/student/email.html')
 
+
+
   
